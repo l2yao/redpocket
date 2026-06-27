@@ -1,0 +1,7 @@
+{
+  "poll_interval_seconds": 5,
+  "max_redpockets_per_run": 10,
+  "require_confirmation": true,
+  "selected_groups": ["🐂🐑🐖無量壽素食🥒群2"],
+  "wechat_window_title": "WeChat"
+}
