@@ -74,23 +74,35 @@ def _validate_groups(client, groups):
 
 def main():
     parser = argparse.ArgumentParser(description="Auto-collect WeChat red pockets.")
-    parser.add_argument(
+    sub = parser.add_subparsers(dest="command")
+
+    collect_parser = sub.add_parser("collect", help="Monitor groups and collect red packets")
+    collect_parser.add_argument(
         "--groups", nargs="*", default=None,
         help="Group names to monitor. If omitted, you will be prompted.",
     )
-    parser.add_argument(
+    collect_parser.add_argument(
         "--poll", type=float, default=None,
         help="Override poll interval (seconds) from config.",
     )
-    parser.add_argument(
+    collect_parser.add_argument(
         "--max", type=int, default=None,
         help="Override max red pockets per run.",
     )
-    parser.add_argument(
+    collect_parser.add_argument(
         "--once", action="store_true",
         help="Scan once and exit (no polling loop).",
     )
+
+    send_parser = sub.add_parser("send", help="Send a message to a group")
+    send_parser.add_argument("group", help="Group name to send to")
+    send_parser.add_argument("message", help="Message text to send")
+
     args = parser.parse_args()
+
+    if args.command == "send":
+        _send(args.group, args.message)
+        return
 
     config = load_config()
     poll_interval = args.poll or config.get("poll_interval_seconds", 1)
@@ -103,7 +115,6 @@ def main():
         if not client.launch():
             logger.error("Could not start WeChat. Please open WeChat and retry.")
             sys.exit(1)
-        # Wait for WeChat to start up
         import time as _time
         _time.sleep(3)
         if not client.connect(timeout=30):
@@ -113,7 +124,6 @@ def main():
     groups = args.groups
     if not groups:
         groups = config.get("selected_groups", [])
-        # Validate persisted groups still exist (without toggling the chat)
         if groups:
             groups = _validate_groups(client, groups)
     if not groups:
@@ -157,6 +167,19 @@ def main():
         logger.info("Interrupted by user.")
 
     logger.info("Done. Collected %d red pocket(s).", collector.collected)
+
+
+def _send(group: str, message: str):
+    """Handle the ``send`` subcommand: connect and send *message* to *group*."""
+    config = load_config()
+    client = WeChatClient(title=config.get("wechat_window_title", "WeChat"))
+    if not client.connect():
+        logger.error("WeChat is not running.")
+        sys.exit(1)
+
+    if not client.send_message(message, chat_name=group):
+        logger.error("Failed to send message.")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

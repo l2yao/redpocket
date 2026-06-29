@@ -27,6 +27,7 @@ class WeChatClient:
         self.app: Optional[Application] = None
         self.window = None
         self._session_list = None
+        self._current_chat: Optional[str] = None
 
     @property
     def _candidate_titles(self) -> List[str]:
@@ -414,10 +415,104 @@ class WeChatClient:
         """Return the title of the currently open conversation."""
         self.ensure_connected()
         try:
+            label = find_by_auto_id(self.window, "current_chat_name_label", timeout=2.0)
+            if label is not None:
+                return label.window_text() or None
+        except Exception:
+            pass
+        try:
             pane = self.window.child_control(control_type="Pane", found_index=0)
             return pane.window_text()
         except Exception:
             return None
+
+    def send_message(self, text: str, chat_name: str = None) -> bool:
+        """Send *text* to *chat_name* (or the current chat).
+
+        Returns True on success.
+        """
+        if not self.ensure_connected():
+            return False
+
+        self.close_red_packet_dialog()
+
+        # Switch chat if requested — never re-select an already-open chat
+        if chat_name is not None and chat_name != self._current_chat:
+            current = self.get_current_chat_name()
+            need_switch = True
+            if current is not None and current == chat_name:
+                need_switch = False
+            elif current is None and self.chat_is_open():
+                need_switch = False
+            if need_switch:
+                if not self.select_chat(chat_name):
+                    logger.warning("Failed to open chat '%s'.", chat_name)
+                    return False
+            self._current_chat = chat_name
+            time.sleep(1.5)
+
+        # Wait for the input field to appear (retry loop)
+        found = None
+        for _ in range(10):
+            found = find_by_auto_id(self.window, "chat_input_field", timeout=2.0)
+            if found is not None:
+                break
+            time.sleep(0.5)
+        if found is None:
+            logger.warning("Could not find chat input field.")
+            return False
+
+        # Click the input field to focus it
+        try:
+            rect = found.rectangle()
+            cx = (rect.left + rect.right) // 2
+            cy = (rect.top + rect.bottom) // 2
+            pyautogui.moveTo(cx, cy, duration=0.1)
+            time.sleep(0.05)
+            pyautogui.click()
+            time.sleep(0.3)
+        except Exception:
+            logger.warning("Could not click input field.")
+            return False
+
+        # Clear any existing text and type the message
+        try:
+            pyautogui.hotkey("ctrl", "a")
+            time.sleep(0.1)
+            pyautogui.press("delete")
+            time.sleep(0.1)
+        except Exception:
+            pass
+        pyautogui.write(text, interval=0.02)
+        time.sleep(0.2)
+
+        # Find and click the Send button (XOutlineButton with text='send')
+        try:
+            for e in self.window.descendants():
+                try:
+                    txt = (e.window_text() or "").lower()
+                    ct = e.element_info.control_type or ""
+                    cls = e.element_info.class_name or ""
+                    if ct == "Button" and txt == "send" and "OutlineButton" in cls:
+                        rect = e.rectangle()
+                        cx = (rect.left + rect.right) // 2
+                        cy = (rect.top + rect.bottom) // 2
+                        pyautogui.moveTo(cx, cy, duration=0.1)
+                        time.sleep(0.05)
+                        pyautogui.click()
+                        time.sleep(0.5)
+                        logger.info("Message sent to '%s'.", chat_name or self._current_chat)
+                        return True
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+        # Fallback: press Enter
+        logger.debug("Send button not found; pressing Enter.")
+        pyautogui.press("enter")
+        time.sleep(0.5)
+        return True
 
     def launch(self) -> bool:
         """Launch WeChat if it is not running.
