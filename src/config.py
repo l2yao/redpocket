@@ -2,12 +2,32 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.json"
+
+
+@dataclass
+class Action:
+    type: str                          # "redpacket" | "message"
+    target: str                        # group/contact name
+    enabled: bool = True
+    interval_seconds: int = 60         # how often to run this action
+    message: str = ""                  # for type "message"
+
+    @classmethod
+    def from_dict(cls, d: dict) -> Action:
+        return cls(
+            type=str(d.get("type", "message")),
+            target=str(d.get("target", "")),
+            enabled=bool(d.get("enabled", True)),
+            interval_seconds=int(d.get("interval_seconds", 60)),
+            message=str(d.get("message", "")),
+        )
 
 
 class Config:
@@ -33,6 +53,17 @@ class Config:
     def set(self, key: str, value):
         self._data[key] = value
         self.save()
+
+    @property
+    def actions(self) -> list[Action]:
+        raw = self.get("actions", [])
+        if not isinstance(raw, list):
+            return []
+        return [Action.from_dict(a) for a in raw]
+
+    @property
+    def tick_interval(self) -> float:
+        return float(self.get("tick_interval", 2))
 
     @property
     def poll_interval(self) -> float:

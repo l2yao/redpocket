@@ -1,7 +1,19 @@
 {
-  "poll_interval_seconds": 5,
-  "max_redpockets_per_run": 10,
-  "require_confirmation": true,
-  "selected_groups": ["🐂🐑🐖無量壽素食🥒群2"],
-  "wechat_window_title": "WeChat"
+  "tick_interval": 2,
+  "wechat_window_title": "WeChat",
+  "actions": [
+    {
+      "type": "redpacket",
+      "target": "🐂🐑🐖無量壽素食🥒群2",
+      "interval_seconds": 30,
+      "enabled": true
+    },
+    {
+      "type": "message",
+      "target": "文件传输助手",
+      "interval_seconds": 3600,
+      "message": "Bot is alive and running!",
+      "enabled": false
+    }
+  ]
 }

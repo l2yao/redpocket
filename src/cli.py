@@ -9,6 +9,7 @@ from .actions.messenger import Messenger
 from .actions.redpacket import RedPacketCollector
 from .client import WeChatClient
 from .config import Config
+from .runner import BotRunner
 from .ui.selector import select_groups
 
 logger = logging.getLogger(__name__)
@@ -104,10 +105,30 @@ def cmd_list(args):
     print(f"\nTotal: {count} conversations")
 
 
+def cmd_run(args):
+    cfg = Config()
+    actions = cfg.actions
+    if not actions:
+        logger.error("No actions defined in config.json")
+        sys.exit(1)
+    logger.info("Configured actions:")
+    for a in actions:
+        logger.info("  %s -> '%s' every %ds [%s]", a.type, a.target, a.interval_seconds, "enabled" if a.enabled else "disabled")
+    dry_run = getattr(args, "dry_run", False)
+    if dry_run:
+        return
+    client = _create_client(cfg)
+    runner = BotRunner(client, actions)
+    runner.run(tick_interval=cfg.tick_interval)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="wechat-bot", description="WeChat automation bot")
     parser.add_argument("-v", "--verbose", action="store_true", help="Debug logging")
-    sub = parser.add_subparsers(dest="command", required=True)
+    parser.add_argument("--dry-run", action="store_true", help="Print actions without connecting")
+    sub = parser.add_subparsers(dest="command")
+
+    p_run = sub.add_parser("run", help="Run the config-driven bot loop")
 
     p_send = sub.add_parser("send", help="Send a message to a group/contact")
     p_send.add_argument("group", help="Target group or contact name")
@@ -132,7 +153,9 @@ def main():
     parser = build_parser()
     args = parser.parse_args()
     _setup_logging(args.verbose)
-    if args.command == "send":
+    if args.command in (None, "run"):
+        cmd_run(args)
+    elif args.command == "send":
         cmd_send(args)
     elif args.command == "broadcast":
         cmd_broadcast(args)
